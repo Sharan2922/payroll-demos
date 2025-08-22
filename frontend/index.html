@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payroll DApp Demo</title>
+
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Ethers v5 UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+  <meta name="description" content="Simple payroll smart contract demo: connect wallet, add employees, and pay salaries on Sepolia." />
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800">
+  <header class="max-w-3xl mx-auto px-4 pt-8 pb-4">
+    <h1 class="text-3xl font-bold">Payroll DApp Demo</h1>
+    
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 pb-24 space-y-6">
+    <!-- Status / Network / Contract Card -->
+    <section class="bg-white rounded-2xl shadow p-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div class="space-y-1">
+          <div id="networkBadge" class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium"></div>
+          <div class="text-sm">Contract: <a id="contractLink" class="text-blue-600 hover:underline" href="#" target="_blank" rel="noreferrer noopener">—</a></div>
+          <div class="text-sm">Account: <span id="accountDisplay" class="font-mono text-gray-700">—</span></div>
+        </div>
+        <div class="flex gap-2">
+          <button id="connectBtn" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow">Connect Wallet</button>
+          <button id="switchBtn" class="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 hidden">Switch to Sepolia</button>
+        </div>
+      </div>
+      <p id="status" class="mt-3 text-sm text-gray-600">Not connected.</p>
+    </section>
+
+    <!-- Add Employee -->
+    <section class="bg-white rounded-2xl shadow p-5">
+      <h2 class="text-xl font-semibold mb-3">Add Employee</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input id="empAddress" class="border rounded-xl px-3 py-2 font-mono" placeholder="Employee address (0x...)" />
+        <input id="empSalaryEth" class="border rounded-xl px-3 py-2" placeholder="Salary in ETH (e.g. 0.02)" />
+        <button id="addEmployeeBtn" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow">Add Employee</button>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">Stores salary in wei on-chain. Owner-only (deployer) action.</p>
+    </section>
+
+    <!-- Pay Employee -->
+    <section class="bg-white rounded-2xl shadow p-5">
+      <h2 class="text-xl font-semibold mb-3">Pay Employee</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input id="payAddress" class="border rounded-xl px-3 py-2 font-mono" placeholder="Employee address (0x...)" />
+        <input id="payAmountEth" class="border rounded-xl px-3 py-2" placeholder="Amount in ETH (e.g. 0.02)" />
+        <button id="payBtn" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow">Pay Employee</button>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">Sends ETH with the transaction (payable function).</p>
+    </section>
+
+    <!-- Log / Messages -->
+    <section class="bg-white rounded-2xl shadow p-5">
+      <h2 class="text-lg font-semibold mb-2">Activity</h2>
+      <div id="log" class="text-sm font-mono whitespace-pre-wrap text-gray-700"></div>
+    </section>
+  </main>
+
+  <!-- Contract constants JSON embedded for quick access; the real file is fetched -->
+  <script id="payrollConstants" type="application/json"></script>
+
+  <script>
+    // ====== Config ======
+    const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7'; // 11155111
+
+    let provider, signer, contract, contractData;
+
+    // Fetch constants/Payroll.json (address + ABI)
+    async function loadContractData() {
+      try {
+        contractData = await fetch('constants/Payroll.json', { cache: 'no-store' }).then(r => r.json());
+        const addr = contractData?.address || '—';
+        document.getElementById('contractLink').textContent = addr;
+        document.getElementById('contractLink').href = `https://sepolia.etherscan.io/address/${addr}`;
+      } catch (e) {
+        appendLog('Error: Could not load constants/Payroll.json. Make sure it exists beside index.html in /constants.');
+      }
+    }
+
+    function short(addr) {
+      if (!addr || addr === '—') return '—';
+      return addr.slice(0, 6) + '…' + addr.slice(-4);
+    }
+
+    function setNetworkBadge(ok, text) {
+      const el = document.getElementById('networkBadge');
+      el.textContent = text;
+      el.className = 'inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ' + (ok
+        ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+        : 'border-amber-300 bg-amber-50 text-amber-700');
+      document.getElementById('switchBtn').classList.toggle('hidden', ok);
+    }
+
+    function appendLog(msg) {
+      const el = document.getElementById('log');
+      const ts = new Date().toLocaleTimeString();
+      el.textContent += `[${ts}] ${msg}\n`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    async function ensureSepolia() {
+      if (!window.ethereum) return false;
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const ok = (chainId === SEPOLIA_CHAIN_ID_HEX);
+      setNetworkBadge(ok, ok ? 'Connected to Sepolia' : `Wrong network (${chainId}).`);
+      return ok;
+    }
+
+    async function switchToSepolia() {
+      if (!window.ethereum) return;
+      try {
+        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }] });
+      } catch (switchError) {
+        // If chain not added, try to add
+        if (switchError.code === 4902) {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: SEPOLIA_CHAIN_ID_HEX,
+                chainName: 'Sepolia',
+                nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
+                rpcUrls: ['https://sepolia.infura.io/v3/'],
+                blockExplorerUrls: ['https://sepolia.etherscan.io']
+              }]
+            });
+          } catch (addErr) {
+            appendLog('User rejected network add.');
+          }
+        } else {
+          appendLog('Network switch error: ' + (switchError?.message || switchError));
+        }
+      }
+      await ensureSepolia();
+    }
+
+    async function connectWallet() {
+      if (!window.ethereum) {
+        alert('MetaMask not found. Please install it.');
+        return;
+      }
+
+      // Request accounts
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      signer = provider.getSigner();
+      const account = await signer.getAddress();
+      document.getElementById('accountDisplay').textContent = short(account);
+      document.getElementById('status').textContent = 'Wallet connected: ' + account;
+
+      // Network check
+      await ensureSepolia();
+
+      // Init contract instance
+      if (contractData?.address && contractData?.abi) {
+        contract = new ethers.Contract(contractData.address, contractData.abi, signer);
+        appendLog('Contract ready @ ' + contractData.address);
+      } else {
+        appendLog('Missing contract data (address/abi).');
+      }
+
+      // React to chain/account changes
+      window.ethereum.on?.('chainChanged', () => window.location.reload());
+      window.ethereum.on?.('accountsChanged', () => window.location.reload());
+    }
+
+    async function addEmployee() {
+      if (!contract) return alert('Connect wallet first.');
+      const addr = document.getElementById('empAddress').value.trim();
+      const salaryEth = document.getElementById('empSalaryEth').value.trim();
+      if (!addr || !salaryEth) return alert('Fill both fields.');
+      try {
+        const salaryWei = ethers.utils.parseEther(salaryEth);
+        const tx = await contract.addEmployee(addr, salaryWei);
+        appendLog('AddEmployee tx: ' + tx.hash);
+        await tx.wait();
+        appendLog('Employee added ✅');
+      } catch (err) {
+        appendLog('Error(addEmployee): ' + (err?.message || err));
+      }
+    }
+
+    async function payEmployee() {
+      if (!contract) return alert('Connect wallet first.');
+      const addr = document.getElementById('payAddress').value.trim();
+      const amountEth = document.getElementById('payAmountEth').value.trim();
+      if (!addr || !amountEth) return alert('Fill both fields.');
+      try {
+        const valueWei = ethers.utils.parseEther(amountEth);
+        const tx = await contract.pay(addr, { value: valueWei });
+        appendLog('Pay tx: ' + tx.hash);
+        await tx.wait();
+        appendLog('Payment successful ✅');
+      } catch (err) {
+        appendLog('Error(pay): ' + (err?.message || err));
+      }
+    }
+
+    // Hook up UI
+    document.getElementById('connectBtn').addEventListener('click', connectWallet);
+    document.getElementById('switchBtn').addEventListener('click', switchToSepolia);
+    document.getElementById('addEmployeeBtn').addEventListener('click', addEmployee);
+    document.getElementById('payBtn').addEventListener('click', payEmployee);
+
+    // Start
+    loadContractData().then(() => ensureSepolia());
+  </script>
+</body>
+</html>

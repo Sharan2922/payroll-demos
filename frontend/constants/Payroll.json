@@ -1,0 +1,117 @@
+{
+  "address": "0x84aCb26ee63E7B9a85BAdd40625ad3227c8004aC",
+  "abi": [
+    {
+      "type": "constructor",
+      "stateMutability": "undefined",
+      "payable": false,
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "EmployeeAdded",
+      "inputs": [
+        {
+          "type": "address",
+          "name": "employee",
+          "indexed": true
+        },
+        {
+          "type": "uint256",
+          "name": "salary",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "Paid",
+      "inputs": [
+        {
+          "type": "address",
+          "name": "employee",
+          "indexed": true
+        },
+        {
+          "type": "uint256",
+          "name": "amount",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "addEmployee",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "address",
+          "name": "_employee"
+        },
+        {
+          "type": "uint256",
+          "name": "_salary"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "employees",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "address",
+          "name": ""
+        }
+      ],
+      "outputs": [
+        {
+          "type": "uint256",
+          "name": "salary"
+        },
+        {
+          "type": "bool",
+          "name": "exists"
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "owner",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "address",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "pay",
+      "constant": false,
+      "stateMutability": "payable",
+      "payable": true,
+      "inputs": [
+        {
+          "type": "address",
+          "name": "_employee"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "receive",
+      "stateMutability": "payable"
+    }
+  ]
+}

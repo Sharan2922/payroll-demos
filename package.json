@@ -1,0 +1,19 @@
+{
+  "name": "final-payroll-dapp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "node": "npx hardhat node",
+    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
+    "serve": "npx http-server frontend -p 3000"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "6.1.0",
+    "hardhat": "2.26.3",
+    "http-server": "14.1.1"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.1"
+  }
+}
